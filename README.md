@@ -10,3 +10,7 @@ Chess.com, the site where I play, is the most famous chess platform in the plane
 ## Code Concept
 
 This code will download and save every daily and live game from a given player. Then, it will read every file, transform the plain text data into a tabular and more organized data and upload it into my Data Warehouse where I access using Power BI. It's currently made to fit my own necessities, but I plan to make a version to fit everyone's needs.
+
+### Chess.com API:
+
+https://www.chess.com/news/view/published-data-api
