@@ -1,5 +1,5 @@
 # my_chess
-That code downloads all my chess.com games daily, organize the information and loads them in a database where I can access using Power BI. That's my nerdy way to understand my chess errors and improve my gameplay
+That code downloads all my chess.com games daily, organize the information and loads them in a database where I can access using Power BI. That's my nerdy way to understand my chess patterns and improve my gameplay
 
 ## Chess and Data
 
