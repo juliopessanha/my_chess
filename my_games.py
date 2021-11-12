@@ -11,7 +11,8 @@ import re
 import pymysql
 from datetime import datetime, timedelta
 
-PGNfolder = "./PGN"
+folder_path = os.path.abspath("./")
+PGNfolder = folder_path + "/PGN"
 
 def get_PGN(player):
     #Gets the pgn files from the chesscom api and saves it locally by month file
