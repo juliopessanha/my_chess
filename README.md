@@ -1,5 +1,5 @@
 # my_chess
-That code downloads all my chess.com games daily, organize the information and loads them in a database where I can access using Power BI. That's my nerdy way to understand my chess patterns and improve my gameplay
+That code downloads all my chess.com games daily, organize the information and loads them in a data warehouse where I can access using Power BI. That's my nerdy way to understand my chess patterns and improve my gameplay
 
 ## Chess and Data
 
@@ -51,7 +51,7 @@ It's important to understand that the code downloaded the games as a plain text 
     - That function is called at the end of each transform_data() call;
     
 5. Database load.
-    - After all the extraction and transformation, the code will load the data into a MariaDB database hosted in a AWS RDS server.
+    - After all the extraction and transformation, the code will load the data into a Data Warehouse hosted in a Oracle Autonomous Database server.
        - if the game already exists in the server, it will not be uploaded;
        - I use the number provided by the end of a chess.com game URL (https://www.chess.com/game/live/27993594069) as a Primary Key ID.
     - Then the piece movement count is uploaded to another table in the same database.
