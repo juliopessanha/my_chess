@@ -8,10 +8,12 @@ import os
 import urllib.request
 import pandas as pd
 import re
-import pymysql
+import cx_Oracle
 from datetime import datetime, timedelta
 
-PGNfolder = "./PGN"
+folder_path = os.path.abspath("./")
+PGNfolder = folder_path + "/PGN"
+print(PGNfolder)
 
 def get_PGN(player):
     #Gets the pgn files from the chesscom api and saves it locally by month file
@@ -40,8 +42,7 @@ def get_PGN(player):
                 print("New folder found %s" % folderpath)
                 skip_refiller = False #it's a completely new month, it won't redownload it
         
-        if skip_refiller: #if the newest month already exists, it will remove it and download a new one
-            #if I played some games in july, it wil remove the "july" file and download it with new games
+        if skip_refiller:
             os.remove(folderpath + ".txt")
             urllib.request.urlretrieve(month_url+'/pgn', folderpath+".txt")
             print("Refilling folder %s" % folderpath)
@@ -75,7 +76,6 @@ def data_delimiter(data):
 
     return(start, end)
 
-#The game itself comes in a really strange format, so I make it cleaner and return only the important information
 def PGNExtract(data):
     s = data.split(" ")
     
@@ -150,7 +150,6 @@ def pieceMoveCounter(moves, playerColor, timeControl_is, id_):
                 else:
                     pieceMoves[id_]["p"] += 1
 
-#Here I take the game as a text and make it return as a list with formated data so i can upload to the database what I really need
 def transform_data(data, start, end, player):
 
     pattern = "\"(.*?)\"" #pattern for regular expression delimiting data between ""
@@ -166,19 +165,19 @@ def transform_data(data, start, end, player):
                 inGame.append("White") #append player color
                 inGame.append(re.search(pattern, game[5]).group(1)) #append black player
 
-            else: #se o player estiver de pretas
+            else:
                 inGame.append(re.search(pattern, game[5]).group(1)) #append black player
                 inGame.append("Black") #append player color
                 inGame.append(whitePlayer) #append opponent
 
-            winner = re.search(pattern, game[16]).group(1) #get winner and winning reason eg: white won by resignation
+            winner = re.search(pattern, game[16]).group(1) #get winner and winning reason
             winner = winner.split(" ")
 
-            if winner[0] == player: #if the player won the match
+            if winner[0] == player:
                 inGame.append('Winner') #indicates that the player won
                 inGame.append(winner[-1]) #winning reason
 
-            elif winner[0] == 'Game': #if it was a draw
+            elif winner[0] == 'Game':
                 inGame.append('Draw') #indicates that the player drew
                 inGame.append(winner[-1]) #winning reason
 
@@ -198,7 +197,7 @@ def transform_data(data, start, end, player):
             dateObject = datetime.strptime(re.search(pattern, game[2]).group(1), "%Y.%m.%d") #Defines date in UTC
             time_utc = re.search(pattern, game[12]).group(1) #get the time in UTC
 
-            #Here converts time UTC to UTC-3, since I'm brazilian and the chesscom uses UTC
+            #Here converts time UTC to UTC-3, since I'm brazilian
             utc_dt = dateObject.strftime("%d/%m/%Y") + " " + time_utc
             utc_dt = datetime.strptime(utc_dt, "%d/%m/%Y %H:%M:%S")
             utc_br = utc_dt - timedelta(hours=3)
@@ -211,9 +210,7 @@ def transform_data(data, start, end, player):
             substring = re.search(pattern2, game[10]).group(1) #same
             
             pattern2 = "(.*?)\."
-
-            #Game opening variations has too much granilarity
-            #so i need to make it more consise to easily understand my games
+            #substring2 = re.search(pattern, substring).group(1)
             try: #this will try to remove the ...nf3 stuff
                 substring = re.search(pattern2, substring).group(1)
                 substring = substring.replace("-1", "")
@@ -229,12 +226,9 @@ def transform_data(data, start, end, player):
                 substring = substring.replace("-4", "")
                 substring = substring.replace("-5", "")
                 substring = substring.replace("-6", "")
-
-            #A chess opening usually has 4 name variations:
-            #Opening, defense, game or attack
-            #Here I'm certain it will remove all granularity after that
-            #which makes the code above kinda superfluous
-            if "Opening" in substring: 
+                
+                        
+            if "Opening" in substring:
                 pattern2 = "(.*?)-Opening" #gets the link our of the equation
                 substring = re.search(pattern2, substring).group(1) + "-Opening"#same
                 #print(substring)
@@ -252,10 +246,12 @@ def transform_data(data, start, end, player):
             if "Attack" in substring:
                 pattern2 = "(.*?)-Attack" #gets the link our of the equation
                 substring = re.search(pattern2, substring).group(1) + "-Attack"#same
-
+                #print(substring)
+            
+            #print(substring)
             inGame.append(substring)
                 
-            gamePGN = PGNExtract(game[-1]) #get the game PGN
+            gamePGN = PGNExtract(game[-1])
                 
             inGame.append(gamePGN) #pgn transformed into a string
             
@@ -270,55 +266,42 @@ def transform_data(data, start, end, player):
             #Here it goes to the function to count how many times I moved each piece
             pieceMoveCounter(gamePGN, inGame[1], inGame[-6], inGame[-1])
 
+            #print("---")
+            #print(inGame)
             allGames.append(inGame)
 
+            
     return(allGames)
-
-def db_connect():
-    #informacoes para acessar o banco de dados (preciso deixar mais seguro)
-    host="Desculpa"
-    user="Github"
-    password="Mas hoje não"
-    database="Ainda resolverei isso"
-
-    try: #conecta no banco de dados MariaDB no RDS
-        conn = pymysql.connect(host=host, user=user, passwd=password, db=database, connect_timeout=5)
-        print("Connecting database")
-    except pymysql.MySQLError as e:
-        print(e)
-
-    return(conn)
     
     
-#Update the chess moves to the database
 def dbUpdate_chess_moves(cur, conn):
     
     print("Inserting counter database")
     for i in pieceMoves:
+        #print(i)
+        sql = "SELECT * FROM chess_moves WHERE id = :1"
+        adr = [i]
 
-        sql = "SELECT * FROM chesscom.chess_moves WHERE id = %s"
-        adr = (i, )
-
-        cur.execute(sql, adr) #busca no banco de dados
+        db_return = cur.execute(sql, adr) #busca no banco de dados
 
         myresult = cur.fetchone() #pega resultado da busca
-
+        #print(myresult)
         if myresult == None: #caso nao esteja
-            sql = "INSERT INTO chesscom.chess_moves (id, Q, N, R, K, B, p, O_O, O_O_O, x, chck) \
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+            sql = "INSERT INTO chess_moves (id, Queen, Knight, Rook, King, Bishop, Pawn, Short_Castle, Long_Castle, Takes, Chck) \
+            VALUES (:1, :2, :3, :4, :5, :6, :7, :8, :9, :10, :11)"
             
             val = (str(i), int(pieceMoves[i]["Q"]), int(pieceMoves[i]["N"]), int(pieceMoves[i]["R"]), int(pieceMoves[i]["K"]), \
                    int(pieceMoves[i]["B"]), int(pieceMoves[i]["p"]), int(pieceMoves[i]["O_O"]), int(pieceMoves[i]["O_O_O"]), \
                    int(pieceMoves[i]["x"]), int(pieceMoves[i]["check"]))
 
-            
             try:
                 cur.execute(sql, val) #insere no banco de dados
+                #print(sql % val)
                 #print("Inserting counter database")
             
             except:
-                None
-                #print("Insert error")
+                #None
+                print("Insert counter error")
                 
         else:
             None
@@ -330,46 +313,51 @@ def main(player):
     
     playerExists = get_PGN(player) #tries to download player PGN data
     if playerExists: #If the player exists, then:        
-    
-        conn = db_connect()
+
+        conn = cx_Oracle.connect(user="user", password="password", dsn="dbname_identification")
         cur = conn.cursor()
 
         df = pd.DataFrame(columns=dfColumns)
-
+        #pieceMoves_df = pd.DataFrame(columns=pieceMovesColumns)
         with os.scandir(PGNfolder + "/" + player.lower()) as folders: #goes through all the player month files
             for file in folders:
-
+                #print(file)
                 data = extract_data(file) #load each month file into the memory
-                start, end = data_delimiter(data) #defines the limits of each data part as two lists
-
-                allGames = transform_data(data, start, end, player) #Go through all the chess games and return it as a list of lists
+                start, end = data_delimiter(data) #defines the limits of each data part
                 
-                df2 = pd.DataFrame(data=allGames, columns=dfColumns) #Append the month to the games dataframe
+                #print(data[start[k]:end[k]])
+
+                allGames = transform_data(data, start, end, player)
+                
+                df2 = pd.DataFrame(data=allGames, columns=dfColumns)
                 df = df.append(df2, ignore_index=True)
 
         print("Trying to insert into database")
         for i in range(0, df.shape[0]):
 
-            sql = "SELECT * FROM chesscom.chess_games WHERE id = %s"
-            adr = (df.iloc[i]['id'], )
+            #sql = "SELECT * FROM chesscom.chess_games WHERE id = %s"
+            adr = [df.iloc[i]['id']]
+            #print(adr)
+            db_return = cur.execute("SELECT * FROM chess_games WHERE id = :1", adr)
 
-            cur.execute(sql, adr) #busca no banco de dados
-
-            myresult = cur.fetchone() #pega resultado da busca
+            myresult = db_return.fetchone() #pega resultado da busca
+            #print(myresult)
             if myresult == None: #caso nao esteja
-                sql = "INSERT INTO chesscom.chess_games (player, playerColor, oponent, result, winningReason, playerElo, oponentElo, timeControl, date, time, opening, pgn, id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                sql = "INSERT INTO chess_games (player, playerColor, opponent, result, winningReason, playerElo, opponentElo, timeControl, date_, time, opening, pgn, id) VALUES (:1, :2, :3, :4, :5, :6, :7, :8, :9, :10, :11, :12, :13)"
                 
-                val = (str(df.iloc[i]['player']), str(df.iloc[i]['playerColor']), str(df.iloc[i]['oponent']), \
+                val = [str(df.iloc[i]['player']), str(df.iloc[i]['playerColor']), str(df.iloc[i]['oponent']), \
                        str(df.iloc[i]['result']), str(df.iloc[i]['winningReason']), int(df.iloc[i]['playerElo']), \
                        int(df.iloc[i]['oponentElo']), str(df.iloc[i]['timeControl']), str(df.iloc[i]['date']), \
-                       str(df.iloc[i]['time']), str(df.iloc[i]['opening']), str(df.iloc[i]['pgn']), str(df.iloc[i]['id']))
+                       str(df.iloc[i]['time']), str(df.iloc[i]['opening']), str(df.iloc[i]['pgn']), str(df.iloc[i]['id'])]
                 
-
+                #print(sql % val)
                 try:
                     cur.execute(sql, val) #insere no banco de dados
-
+                    #print("Inserting into database")
                 except:
-                    None
+                    print("Insert game error")
+                    #print(sql % val)
+                    #None
                     
             conn.commit()
 
@@ -383,11 +371,9 @@ def main(player):
     conn.close()
     
     
-#Pandas dataframe column names
 dfColumns = ["player", "playerColor", "oponent", "result", "winningReason", "playerElo", "oponentElo", "timeControl", 'date', 'time', 'opening', 'pgn', 'id']
 
-
-pieceMoves = {} #Piece movoves bones. It's going to be filled with a dictionary of how many times I moved each piece in each game
+pieceMoves = {}
 
 if __name__ == "__main__":
     main("Hallsand")
